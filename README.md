@@ -1,3 +1,7 @@
+![NYX Phoenix header](https://capsule-render.vercel.app/api?type=waving&color=gradient&height=180&section=header&text=NYX%20Phoenix%20Migration&fontSize=42&animation=fadeIn)
+
+![Typing](https://readme-typing-svg.demolab.com?font=Fira+Code&pause=1000&color=F472B6&width=650&lines=Enterprise+multi-agent+simulation,+migrated.;Streamlit+to+Next.js+plus+FastAPI.;Same+deterministic+kernel,+zero+logic+loss.)
+
 # NYX Phoenix Migration - Enterprise Multi-Agent Simulation Platform
 
 ## 🚀 Overview
@@ -237,3 +241,34 @@ This migration enhances rather than replaces the core simulation logic.
 ---
 
 *Built with ❤️ by Principal Staff Architect & Cognitive Systems Engineer*
+
+## 🗺️ Project map
+
+```mermaid
+flowchart TD
+    LEG["Legacy: streamlit_app.py + nyx_kernel.py (root)"] --> MIG["Migration: kernel copied unmodified"]
+    MIG --> BACK["backend/app/core/nyx_kernel.py — SeededRandom, CognitiveAgent, run_simulation, detect_black_swan, run_counterfactual, run_multi_trial, game_theory_insights"]
+    BACK --> SVC["backend/app/services/ — fallback.py (KeyRotator + circuit breaker), debate.py (preserved), retriever.py (SQL + vector RAG), adapters.py"]
+    SVC --> API["backend/app/main.py — FastAPI, localhost:8000, /docs"]
+    API --> END["14 endpoints + 1 WebSocket: /health, /api/simulate, /api/keys/status, /api/generate, /api/retrieve, /api/analyze/*, /ws/simulation/{id}, /api/config/reload"]
+    API --> FRONT["frontend/src/ — Next.js 14 (Vercel), page.tsx dashboard, TimeScrubber.tsx, api.ts React Query hooks, Tailwind glassmorphism"]
+    DEP["vercel.json (frontend rewrites) + render.yaml (backend service)"] --> API
+    DOC["ARCHITECTURE.md + PHOENIX_DISCOVERY_REPORT.md"] --> BACK
+```
+
+## 📊 At a glance (facts checked against the repo 30 Oct 2026; deployment and API claims as recorded in the README)
+
+| Measure | Value |
+|---|---|
+| What | Enterprise multi-agent simulation platform — the NYX Decision Intelligence Simulator migrated from Streamlit to a decoupled N-tier architecture |
+| Frontend | Next.js 14, Tailwind glassmorphism ("lavender haze"), dashboard page + TimeScrubber component, React Query hooks in src/lib/api.ts; dev server localhost:3000 |
+| Backend | FastAPI (async), entry backend/app/main.py; dev server localhost:8000, docs at /docs |
+| Golden core | backend/app/core/nyx_kernel.py is the original kernel copied without modification: SeededRandom deterministic PRNG, CognitiveAgent 10-variable psychological model, run_simulation, detect_black_swan, run_counterfactual, run_multi_trial, game_theory_insights |
+| KeyRotator | Enhanced generate_with_fallback: circuit breaker, weighted round-robin by success rate, 429 rate-limit tracking with cooldown, hot-reload of keys without restart |
+| Retriever (Oracle) | Greenfield RAG: SQLAlchemy (PostgreSQL, SQLite) + vector adapters (Qdrant, Pinecone ready), hybrid search, async I/O |
+| Real-time | WebSocket /ws/simulation/{id} for live simulation streaming; live key-health dashboard with success rates |
+| API | 14 HTTP endpoints + 1 WebSocket (see map): health, simulate, keys status/reset, generate, retrieve, black-swan / counterfactual / multi-trial / game-theory analysis, config reload |
+| UI features | Agent state cards, mode badges (EXECUTE, AVOID, RECOVER, ...), four-key outcome vector metrics |
+| Security | Keys in environment variables only (never committed), CORS for specific origins in production, Pydantic input validation, 503 on invalid config instead of crashing |
+| Deployment | Frontend: Vercel (vercel.json rewrites, NEXT_PUBLIC_BACKEND_URL env); backend: Render web service (render.yaml, uvicorn app.main:app); no live deployment URL is claimed in the README |
+| Files | 35: backend (main, core, services, db, requirements), frontend (Next.js app, components, lib, configs), root legacy streamlit_app.py + nyx_kernel.py, ARCHITECTURE.md, PHOENIX_DISCOVERY_REPORT.md, render.yaml, vercel.json |
