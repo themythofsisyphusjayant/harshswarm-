@@ -66,6 +66,44 @@ simulation itself: same kernel, same results, deployable parts.
    └──────────────────┘  └──────────────────┘  └──────────────────┘
 ```
 
+```mermaid
+flowchart TB
+    subgraph Frontend["Frontend — Next.js 14 · Vercel"]
+        Dashboard["Dashboard — page.tsx · dashboard/"]
+        TimeScrubber["TimeScrubber — scrub simulation rounds"]
+        ApiHooks["React Query hooks — frontend/src/lib/api.ts"]
+    end
+
+    subgraph Backend["Backend — FastAPI · app/main.py v2.0.0"]
+        REST["14 HTTP endpoints"]
+        WS["1 WebSocket — /ws/simulation/{id}"]
+    end
+
+    subgraph Services["Services"]
+        Kernel["nyx_kernel.py — preserved, byte-identical"]
+        Debate["DebateOrchestrator — DebateAgent x N"]
+        Fallback["KeyRotator — 8 LLM providers, circuit breaker"]
+        Retriever["DatabaseRetriever — SQL + vector RAG"]
+        Adapters["SemanticCache — Redis · Celery task queue"]
+    end
+
+    Dashboard --> ApiHooks
+    TimeScrubber --> ApiHooks
+    ApiHooks -->|"REST + WebSocket"| REST
+    ApiHooks -->|"live ticks"| WS
+    REST --> Kernel
+    REST --> Debate
+    REST --> Fallback
+    REST --> Retriever
+    WS --> Kernel
+    Debate -->|"generate_with_fallback"| Fallback
+    Retriever --> Adapters
+```
+
+The same tiers as a diagram: the frontend is a dashboard only, the
+backend is the only thing that talks to the kernel and the services, and
+the debate agents reach the LLMs only through the KeyRotator fallback.
+
 The four tiers, as stated in `backend/app/main.py`:
 
 | Tier | Component | Notes |
@@ -147,6 +185,23 @@ class, wrapped for async FastAPI use:
 
 Debate agents argue through the LLM fallback (below), so a debate keeps
 going even if one provider fails mid-round.
+
+```mermaid
+flowchart LR
+    Client["POST /api/debate — topic, agents, rounds (default 3)"] --> Orch["DebateOrchestrator"]
+    Orch -->|"round 1..N"| Agent["DebateAgent — speaks 1-3 sentences in character"]
+    Agent -->|"reply to previous message"| Fallback["KeyRotator — generate_with_fallback"]
+    Fallback -->|"provider fails"| Next["Next provider — weighted round-robin"]
+    Next --> Fallback
+    Fallback --> Agent
+    Agent -->|"argument added to log"| Orch
+    Orch -->|"after N rounds"| Winner["Full debate log + winner"]
+```
+
+Each agent speaks in character and replies to the previous message; the
+debate keeps going even if a provider fails mid-round, because every
+generation goes through the KeyRotator fallback.
+
 
 ## KeyRotator: LLM fallback with a circuit breaker
 
