@@ -1,274 +1,163 @@
-![NYX Phoenix header](https://capsule-render.vercel.app/api?type=waving&color=gradient&height=180&section=header&text=NYX%20Phoenix%20Migration&fontSize=42&animation=fadeIn)
+# NYX Phoenix Migration
 
-![Typing](https://readme-typing-svg.demolab.com?font=Fira+Code&pause=1000&color=F472B6&width=650&lines=Enterprise+multi-agent+simulation,+migrated.;Streamlit+to+Next.js+plus+FastAPI.;Same+deterministic+kernel,+zero+logic+loss.)
+Migration of the NYX Decision Intelligence Simulator from a single Streamlit
+application to a decoupled architecture: a Next.js frontend, a FastAPI
+backend, and the original simulation kernel preserved unchanged.
 
-# NYX Phoenix Migration - Enterprise Multi-Agent Simulation Platform
+## Problem
 
-## 🚀 Overview
+The original simulator was a monolithic Streamlit app. The simulation logic,
+the user interface, and the LLM provider handling were coupled in one process,
+which made the system hard to deploy, hard to test, and hard to extend. The
+goal of this migration was to separate those concerns without changing the
+simulation itself: same kernel, same results, deployable parts.
 
-This is the **complete migration** of the legacy Streamlit-based NYX Decision Intelligence Simulator into a modern, decoupled N-tier architecture. The new platform features:
+## Approach
 
-- **Next.js 14 Frontend** - Deployable on Vercel with stunning glassmorphism UI
-- **FastAPI Backend** - Async Python backend with circuit breaker protection
-- **Enhanced KeyRotator** - Intelligent multi-provider LLM fallback with weighted round-robin
-- **Real-time Streaming** - WebSocket support for live simulation monitoring
-- **Database Integration** - SQL + Vector DB support for RAG (Retrieval Augmented Generation)
+- The original `nyx_kernel.py` was copied into `backend/app/core/` without
+  modification. It is byte-identical to the legacy copy at the repository
+  root (same blob in the repository tree).
+- The backend is FastAPI. It exposes the simulation, analysis, and LLM
+  fallback functions as HTTP endpoints, plus a WebSocket for live runs.
+- The frontend is Next.js 14. It is a dashboard over the API; it contains no
+  simulation logic of its own.
+- LLM provider fallback was kept and hardened with a circuit breaker, instead
+  of being rewritten.
 
----
-
-## 📁 Project Structure
+## Layout
 
 ```
-/workspace
-├── backend/                    # FastAPI Backend (Render/Fly.io)
-│   ├── app/
-│   │   ├── core/
-│   │   │   └── nyx_kernel.py   # PRESERVED: Original simulation engine
-│   │   ├── services/
-│   │   │   ├── fallback.py     # ENHANCED: KeyRotator with Circuit Breaker
-│   │   │   ├── retriever.py    # NEW: Database/Vector DB scanner
-│   │   │   └── debate.py       # PRESERVED: Debate orchestration
-│   │   ├── db/                 # Database models (future)
-│   │   └── main.py             # FastAPI application entry point
-│   └── requirements.txt        # Python dependencies
-│
-├── frontend/                   # Next.js Frontend (Vercel)
-│   ├── src/
-│   │   ├── app/
-│   │   │   ├── page.tsx        # Main dashboard component
-│   │   │   ├── layout.tsx      # Root layout with React Query
-│   │   │   └── globals.css     # Tailwind + custom styles
-│   │   └── lib/
-│   │       └── api.ts          # React Query hooks for API calls
-│   ├── public/
-│   │   └── _redirects          # SPA routing for Netlify/Vercel
-│   ├── package.json
-│   ├── next.config.js
-│   └── tailwind.config.js
-│
-├── vercel.json                 # Vercel rewrites to backend
-├── render.yaml                 # Render deployment config
-├── .env.example                # Environment variable template
-└── ARCHITECTURE.md             # Detailed architecture diagrams
+backend/                  FastAPI backend
+  app/main.py             Application entry point; routes, health, WebSocket
+  app/core/nyx_kernel.py  Simulation kernel, copied unmodified
+  app/services/fallback.py   KeyRotator: multi-provider LLM fallback
+  app/services/debate.py     Debate orchestration (preserved)
+  app/services/retriever.py  RAG retriever: SQL + vector search
+  app/services/adapters.py   Provider adapters
+  app/db/                 Database models (placeholder)
+  requirements.txt
+frontend/                 Next.js 14 app
+  src/app/page.tsx        Main dashboard
+  src/app/dashboard/      Dashboard route
+  src/components/TimeScrubber.tsx
+  src/lib/api.ts          React Query hooks for the API
+  package.json, next.config.js, tailwind.config.js
+streamlit_app.py          Legacy Streamlit app (kept for reference)
+nyx_kernel.py             Legacy kernel copy (kept for reference)
+ARCHITECTURE.md           Architecture diagrams and data flow
+PHOENIX_DISCOVERY_REPORT.md  Discovery report for the migration
+vercel.json               Frontend rewrites
+render.yaml               Backend service definition
+.env.example              Environment variable template
 ```
 
----
+## The kernel
 
-## 🎯 Key Features Preserved & Enhanced
+The kernel is deterministic: a seeded PRNG (`SeededRandom`) drives a
+population of `CognitiveAgent` instances, each carrying ten psychological
+variables. It provides:
 
-### 1. Golden Core (Zero Logic Loss)
-The original `nyx_kernel.py` is **directly copied** into `backend/app/core/` without modification:
-- `SeededRandom` - Deterministic PRNG
-- `CognitiveAgent` - 10-variable psychological model
-- `run_simulation()` - Main simulation orchestrator
-- `detect_black_swan()` - Fragility analysis
-- `run_counterfactual()` - What-if scenarios
-- `run_multi_trial()` - Statistical aggregation
-- `game_theory_insights()` - Nash equilibrium analysis
+- `run_simulation()` — the round loop
+- `detect_black_swan()` — fragility analysis
+- `run_counterfactual()` — what-if scenarios
+- `run_multi_trial()` — statistical aggregation over repeated runs
+- `game_theory_insights()` — Nash equilibrium analysis
 
-### 2. Enhanced KeyRotator (with Circuit Breaker)
-The original `generate_with_fallback()` logic is preserved but enhanced with:
-- **Circuit Breaker Pattern** - Prevents repeated calls to failing providers
-- **Weighted Round-Robin** - Adapts priority based on success rates
-- **Rate Limit Tracking** - Remembers 429 errors and applies cooldown
-- **Hot-Reload Configuration** - Add new keys without server restart
+Nothing in the kernel was changed in this migration. The legacy copy at the
+repository root is retained so the preservation claim can be checked directly.
 
-### 3. New Database Retriever (Oracle)
-Greenfield implementation for RAG functionality:
-- SQLAlchemy adapter for SQL databases (PostgreSQL, SQLite)
-- Vector DB adapters (Qdrant, Pinecone ready)
-- Hybrid search combining both sources
-- Async I/O for non-blocking retrieval
+## KeyRotator
 
----
+`backend/app/services/fallback.py` keeps the original
+`generate_with_fallback()` behaviour and adds:
 
-## 🛠️ Quick Start
+- A circuit breaker, so a failing provider is skipped instead of retried
+  repeatedly.
+- Weighted round-robin: provider weights adapt to observed success rates.
+- Rate-limit tracking: 429 responses trigger a cooldown for that provider.
+- Hot reload of API keys from the environment without a restart.
 
-### Backend Setup
+## Retriever
+
+`backend/app/services/retriever.py` is new in this migration. It provides
+retrieval for RAG: SQLAlchemy adapters for SQL databases (PostgreSQL,
+SQLite), vector database adapters (Qdrant, Pinecone), hybrid search across
+both, and async I/O.
+
+## API
+
+Base URL `http://localhost:8000` in development; interactive docs at `/docs`.
+Verified against `backend/app/main.py` on 21 Nov 2026: 14 HTTP endpoints and
+one WebSocket.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Health check |
+| `/health/ready` | GET | Readiness check with dependency verification |
+| `/api/simulate` | POST | Run a cognitive-social simulation |
+| `/api/simulate/{id}` | GET | Retrieve a simulation by ID |
+| `/api/debate` | POST | Run a debate round |
+| `/api/keys/status` | GET | API key health dashboard data |
+| `/api/keys/reset/{name}` | POST | Reset a provider circuit breaker |
+| `/api/generate` | POST | Generate text with LLM fallback |
+| `/api/retrieve` | POST | Retrieve context from a database (RAG) |
+| `/api/analyze/black-swan` | POST | Detect fragile assumptions |
+| `/api/analyze/counterfactual` | POST | Run a what-if scenario |
+| `/api/analyze/multi-trial` | POST | Run multiple trials |
+| `/api/analyze/game-theory` | POST | Compute Nash equilibria |
+| `/api/config/reload` | POST | Hot-reload API keys from the environment |
+| `/ws/simulation/{id}` | WebSocket | Live simulation streaming |
+
+## Run it
+
+Backend:
 
 ```bash
-cd /workspace/backend
-
-# Create virtual environment
+cd backend
 python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-
-# Install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Copy environment template
-cp ../.env.example .env
-
-# Edit .env and add your API keys
-# GROQ_API_KEY=your_key_here
-# GEMINI_API_KEY=your_key_here
-# etc.
-
-# Run the backend
+cp ../.env.example .env   # add API keys
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Backend will be available at: `http://localhost:8000`
-API docs at: `http://localhost:8000/docs`
-
-### Frontend Setup
+Frontend:
 
 ```bash
-cd /workspace/frontend
-
-# Install dependencies
+cd frontend
 npm install
-
-# Create environment file
 cp .env.example .env.local
-
-# Run development server
 npm run dev
 ```
 
-Frontend will be available at: `http://localhost:3000`
+The frontend runs on `http://localhost:3000`.
 
----
+## Deployment
 
-## 🌐 Deployment
+- Frontend: Vercel. `vercel.json` defines rewrites to the backend; set
+  `NEXT_PUBLIC_BACKEND_URL` to the backend URL.
+- Backend: Render. `render.yaml` defines the web service; build with
+  `pip install -r backend/requirements.txt`, start with
+  `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 
-### Frontend (Vercel)
+No live deployment is configured in this repository.
 
-1. Push code to GitHub
-2. Import project in Vercel
-3. Set build command: `npm run build`
-4. Set output directory: `dist`
-5. Add environment variable: `NEXT_PUBLIC_BACKEND_URL=https://your-backend.onrender.com`
+## Security
 
-Vercel will automatically use `vercel.json` for API rewrites.
+- API keys live in environment variables only and are never committed.
+- CORS is configured for specific origins in production.
+- Inputs are validated with Pydantic models.
+- Invalid configuration returns 503 rather than crashing the service.
 
-### Backend (Render)
+## Status
 
-1. Push code to GitHub
-2. Create new Web Service in Render
-3. Connect repository
-4. Build command: `pip install -r backend/requirements.txt`
-5. Start command: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-6. Add all API key environment variables from `.env.example`
+The migration is complete: kernel preserved, backend and frontend built,
+deployment configs in place. Work in progress:
 
----
+- No unit tests for the backend services yet.
+- No end-to-end tests for critical flows.
+- No load testing or monitoring setup.
 
-## 🔌 API Endpoints
+## License
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Basic health check |
-| `/health/ready` | GET | Readiness check with dependency verification |
-| `/api/simulate` | POST | Run cognitive-social simulation |
-| `/api/simulate/{id}` | GET | Retrieve simulation by ID |
-| `/api/keys/status` | GET | Get API key health dashboard data |
-| `/api/keys/reset/{name}` | POST | Reset circuit breaker for provider |
-| `/api/generate` | POST | Generate text with LLM fallback |
-| `/api/retrieve` | POST | Retrieve context from database (RAG) |
-| `/api/analyze/black-swan` | POST | Detect fragile assumptions |
-| `/api/analyze/counterfactual` | POST | Run what-if scenario |
-| `/api/analyze/multi-trial` | POST | Run multiple trials |
-| `/api/analyze/game-theory` | POST | Compute Nash equilibria |
-| `/ws/simulation/{id}` | WebSocket | Real-time simulation streaming |
-| `/api/config/reload` | POST | Hot-reload API keys from env |
-
----
-
-## 🔐 Security
-
-- All API keys stored in environment variables (never committed)
-- CORS configured for specific origins in production
-- Input validation via Pydantic models
-- 503 errors returned for invalid configurations (never crashes)
-
----
-
-## 📊 Architecture Highlights
-
-See `ARCHITECTURE.md` for detailed Mermaid diagrams showing:
-- N-tier component relationships
-- Data flow sequences
-- Deployment topology
-- Security boundaries
-
----
-
-## 🎨 UI Features
-
-- **Glassmorphism Design** - Lavender haze aesthetic matching original Streamlit app
-- **Live Key Health Dashboard** - Real-time provider status with success rates
-- **Agent State Cards** - Visual display of agent psychological states
-- **Mode Badges** - Color-coded agent mode indicators (EXECUTE, AVOID, RECOVER, etc.)
-- **Outcome Vector Metrics** - Four-key performance indicators
-
----
-
-## 🧪 Testing
-
-```bash
-# Backend tests (when added)
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
-```
-
----
-
-## 📝 Migration Checklist
-
-- [x] Discovery Report completed
-- [x] Golden Core identified and preserved
-- [x] KeyRotator enhanced with Circuit Breaker
-- [x] Database Retriever implemented
-- [x] FastAPI backend created
-- [x] Next.js frontend created
-- [x] Vercel/Render configs created
-- [ ] Unit tests for backend services
-- [ ] E2E tests for critical flows
-- [ ] Load testing documentation
-- [ ] Monitoring/alerting setup
-
----
-
-## 🙏 Credits
-
-Original Streamlit application and NYX Kernel preserved intact.
-This migration enhances rather than replaces the core simulation logic.
-
----
-
-*Built with ❤️ by Principal Staff Architect & Cognitive Systems Engineer*
-
-## 🗺️ Project map
-
-```mermaid
-flowchart TD
-    LEG["Legacy: streamlit_app.py + nyx_kernel.py (root)"] --> MIG["Migration: kernel copied unmodified"]
-    MIG --> BACK["backend/app/core/nyx_kernel.py — SeededRandom, CognitiveAgent, run_simulation, detect_black_swan, run_counterfactual, run_multi_trial, game_theory_insights"]
-    BACK --> SVC["backend/app/services/ — fallback.py (KeyRotator + circuit breaker), debate.py (preserved), retriever.py (SQL + vector RAG), adapters.py"]
-    SVC --> API["backend/app/main.py — FastAPI, localhost:8000, /docs"]
-    API --> END["14 endpoints + 1 WebSocket: /health, /api/simulate, /api/keys/status, /api/generate, /api/retrieve, /api/analyze/*, /ws/simulation/{id}, /api/config/reload"]
-    API --> FRONT["frontend/src/ — Next.js 14 (Vercel), page.tsx dashboard, TimeScrubber.tsx, api.ts React Query hooks, Tailwind glassmorphism"]
-    DEP["vercel.json (frontend rewrites) + render.yaml (backend service)"] --> API
-    DOC["ARCHITECTURE.md + PHOENIX_DISCOVERY_REPORT.md"] --> BACK
-```
-
-## 📊 At a glance (facts checked against the repo 30 Oct 2026; deployment and API claims as recorded in the README)
-
-| Measure | Value |
-|---|---|
-| What | Enterprise multi-agent simulation platform — the NYX Decision Intelligence Simulator migrated from Streamlit to a decoupled N-tier architecture |
-| Frontend | Next.js 14, Tailwind glassmorphism ("lavender haze"), dashboard page + TimeScrubber component, React Query hooks in src/lib/api.ts; dev server localhost:3000 |
-| Backend | FastAPI (async), entry backend/app/main.py; dev server localhost:8000, docs at /docs |
-| Golden core | backend/app/core/nyx_kernel.py is the original kernel copied without modification: SeededRandom deterministic PRNG, CognitiveAgent 10-variable psychological model, run_simulation, detect_black_swan, run_counterfactual, run_multi_trial, game_theory_insights |
-| KeyRotator | Enhanced generate_with_fallback: circuit breaker, weighted round-robin by success rate, 429 rate-limit tracking with cooldown, hot-reload of keys without restart |
-| Retriever (Oracle) | Greenfield RAG: SQLAlchemy (PostgreSQL, SQLite) + vector adapters (Qdrant, Pinecone ready), hybrid search, async I/O |
-| Real-time | WebSocket /ws/simulation/{id} for live simulation streaming; live key-health dashboard with success rates |
-| API | 14 HTTP endpoints + 1 WebSocket (see map): health, simulate, keys status/reset, generate, retrieve, black-swan / counterfactual / multi-trial / game-theory analysis, config reload |
-| UI features | Agent state cards, mode badges (EXECUTE, AVOID, RECOVER, ...), four-key outcome vector metrics |
-| Security | Keys in environment variables only (never committed), CORS for specific origins in production, Pydantic input validation, 503 on invalid config instead of crashing |
-| Deployment | Frontend: Vercel (vercel.json rewrites, NEXT_PUBLIC_BACKEND_URL env); backend: Render web service (render.yaml, uvicorn app.main:app); no live deployment URL is claimed in the README |
-| Files | 35: backend (main, core, services, db, requirements), frontend (Next.js app, components, lib, configs), root legacy streamlit_app.py + nyx_kernel.py, ARCHITECTURE.md, PHOENIX_DISCOVERY_REPORT.md, render.yaml, vercel.json |
+No license file is present in this repository.
